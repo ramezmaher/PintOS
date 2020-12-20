@@ -43,6 +43,12 @@ static struct lock set_priority_lock;
 /* Load average which estimates the average number of threads ready to run over the past minute.*/
 struct real Load_average;
 
+/* Load average calculation lock. */
+static struct lock load_avg_lock; 
+
+/*  Number of ready threads.  */
+int ready_threads;
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -97,6 +103,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   lock_init (&set_priority_lock);
+  lock_init (&load_avg_lock);
   int i;
   for (i = 0; i <= PRI_MAX; i++)
   	list_init (&ready_list[i]);
@@ -109,6 +116,7 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
   initial_thread->niceness = 0;
   initial_thread->recent_cpu_time = get_real(0);
+  Load_average = get_real(0);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -147,7 +155,7 @@ thread_tick (void)
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
+    intr_yield_on_return ();  
 }
 
 /* Prints thread statistics. */
@@ -362,16 +370,27 @@ thread_foreach (thread_action_func *func, void *aux)
 /* Calculates priority for 4.4BSD Scheduler. */
 void
 Calculate_priority_mlfqs(struct thread * cur){
-  struct real f;
-  f = div_real_int(cur->recent_cpu_time, 4);
-  f = sub_real_int(f, (2 * cur->priority ));
-  cur ->priority = PRI_MAX - get_int_truncate(f);
+  ASSERT(is_thread(cur));
+  if(cur != idle_thread){
+    struct real f;
+    int Priority;
+    f = div_real_int(cur->recent_cpu_time, 4);
+    f = sub_real_int(f, (2 * cur->priority ));
+    Priority = PRI_MAX - get_int_truncate(f);
+    if(Priority > PRI_MAX )
+      cur -> priority = PRI_MAX;
+    else if(Priority < PRI_MIN)
+      cur -> priority = PRI_MIN;
+    else 
+      cur -> priority = Priority;
+  }
 } 
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
+  ASSERT( PRI_MIN <= new_priority && new_priority <= PRI_MAX);
   if(!thread_mlfqs){   
     lock_acquire(&set_priority_lock);
     int old_priority = thread_current ()->priority;
@@ -395,13 +414,12 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice) 
 {
+  ASSERT(-20 <= nice && nice <= 20);
   struct thread *cur = thread_current ();
   if(thread_mlfqs && cur != idle_thread){
     cur -> niceness = nice;
     Calculate_priority_mlfqs(cur);
-
-    /* TO-DO: yeild if priority higher than running thread. */
-
+    thread_yield();
   }
 }
 
@@ -416,7 +434,11 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  return get_int_roundOff(mul_real_int(Load_average,100));
+  int load;
+  lock_acquire(&load_avg_lock);
+  load = get_int_roundOff(mul_real_int(Load_average,100));
+  lock_release(&load_avg_lock);
+  return load;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -433,16 +455,26 @@ thread_get_recent_cpu (void)
 
 void 
 calculate_load_avg(void){
-
-  /*    TO DO   */
-
+  lock_acquire(&load_avg_lock);
+  struct real f1 = get_real_fraction(50,60);
+  struct real f2 = get_real_fraction(1,60);
+  f1 = mul_real_real(f1,Load_average);
+  f2 = mul_real_int(f2, ready_threads);
+  Load_average = add_real_real(f1,f2);
+  lock_release(&load_avg_lock);
 }
 
 void 
-calculate_recent_cpu(void){
-
-  /*    TO DO   */
-
+calculate_recent_cpu(struct thread *cur){
+  ASSERT(is_thread(cur));
+  if(cur != idle_thread){
+    struct real f1,f2;
+    f1 = mul_real_int(Load_average,2);
+    f2 = add_real_int(f1,1);
+    f1 = div_real_real(f1,f2);
+    f2 = mul_real_real(f1,cur->recent_cpu_time);
+    cur->recent_cpu_time = add_real_int(f2,cur->niceness);
+  }
 }
 
 
@@ -548,7 +580,7 @@ init_thread_mlfqs (struct thread *t, const char *name, int nice, struct real cpu
   enum intr_level old_level;
 
   ASSERT (t != NULL);
-  ASSERT ( -20 <= nice && nice >= 20);
+  ASSERT ( -20 <= nice && nice <= 20);
   //ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
 
