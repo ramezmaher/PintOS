@@ -150,9 +150,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 /* Added functions */
-void calculate_load_avg();
-void calculate_recent_cpu();
+void calculate_load_avg(void);
+void calculate_recent_cpu(void);
 void Calculate_priority_mlfqs(struct thread * cur);
-static void init_thread_mlfqs (struct thread *t, const char *name, int nice, struct real cpu_time);
 
 #endif /* threads/thread.h */

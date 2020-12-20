@@ -415,14 +415,14 @@ thread_get_recent_cpu (void)
 }
 
 void 
-calculate_load_avg(){
+calculate_load_avg(void){
 
   /*    TO DO   */
 
 }
 
 void 
-calculate_recent_cpu(){
+calculate_recent_cpu(void){
 
   /*    TO DO   */
 
