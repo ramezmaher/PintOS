@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "real_num.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -89,12 +90,11 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-
+    int niceness;                       /* Integer between {-20,20}, indicates how likely the thread to give CPU time. */
+    struct real recent_cpu_time;        /* The recent time on cpu spent by thread. */ 
+    int64_t wakeup;                     //for storing the time for each thread to wake up
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
-    int64_t wakeup; //for storing the time for each thread to wake up
-
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -109,6 +109,9 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+/* Variable that estimates the average number of threads ready to run over the past minute. */
+extern struct real Load_average;
 
 void thread_init (void);
 void thread_start (void);
@@ -136,15 +139,20 @@ void thread_foreach (thread_action_func *, void *);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
+bool list_less (const struct list_elem*, const struct list_elem*, void *);
+
+/* Methods for 4.4BSD Scheduling */
+
+/* Initial function */  
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-bool list_less (const struct list_elem*, const struct list_elem*, void *);
-
-
-
-
+/* Added functions */
+void calculate_load_avg();
+void calculate_recent_cpu();
+void Calculate_priority_mlfqs(struct thread * cur);
+static void init_thread_mlfqs (struct thread *t, const char *name, int nice, struct real cpu_time);
 
 #endif /* threads/thread.h */
