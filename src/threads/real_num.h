@@ -19,6 +19,8 @@ int get_int_roundOff(struct real f);
 /*      Given an integer value, return its representation in 17.14 fixed-point,     */
 /*      such operation is achived by left-shifting the integer by 14 bits      */
 struct real get_real(int i);
+/*      Given two integers x,y return x/y in fixed point format     */
+struct real get_real_fraction(int x, int y);
 /*      Returns real n = real x + int y     */
 struct real add_real_int(struct real x,int y);
 /*      Returns real n =  real x + real y       */

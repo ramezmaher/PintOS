@@ -43,6 +43,9 @@ static struct lock set_priority_lock;
 /* Load average which estimates the average number of threads ready to run over the past minute.*/
 struct real Load_average;
 
+/*  Number of ready threads.  */
+int ready_threads;
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -399,9 +402,7 @@ thread_set_nice (int nice)
   if(thread_mlfqs && cur != idle_thread){
     cur -> niceness = nice;
     Calculate_priority_mlfqs(cur);
-
-    /* TO-DO: yeild if priority higher than running thread. */
-
+    thread_yield();
   }
 }
 
@@ -433,9 +434,11 @@ thread_get_recent_cpu (void)
 
 void 
 calculate_load_avg(void){
-
-  /*    TO DO   */
-
+  struct real f1 = get_real_fraction(50,60);
+  struct real f2 = get_real_fraction(1,60);
+  f1 = mul_real_real(f1,Load_average);
+  f2 = mul_real_int(f2, ready_threads);
+  Load_average = add_real_real(f1,f2);
 }
 
 void 
