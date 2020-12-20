@@ -443,9 +443,15 @@ calculate_load_avg(void){
 
 void 
 calculate_recent_cpu(void){
-
-  /*    TO DO   */
-
+  struct thread * cur = thread_current();
+  if(cur != idle_thread){
+    struct real f1,f2;
+    f1 = mul_real_int(Load_average,2);
+    f2 = add_real_int(f1,1);
+    f1 = div_real_real(f1,f2);
+    f2 = mul_real_real(f1,cur->recent_cpu_time);
+    cur->recent_cpu_time = add_real_int(f2,cur->niceness);
+  }
 }
 
 
