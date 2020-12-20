@@ -37,6 +37,9 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+/* Lock used by thread_set_priority(). */
+static struct lock set_priority_lock;
+
 /* Load average which estimates the average number of threads ready to run over the past minute.*/
 struct real Load_average;
 
@@ -93,6 +96,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  lock_init (&set_priority_lock);
   int i;
   for (i = 0; i <= PRI_MAX; i++)
   	list_init (&ready_list[i]);
@@ -212,9 +216,12 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
-
+  
   /* Add to run queue. */
   thread_unblock (t);
+  
+  if (priority > thread_current ()->priority)
+    thread_yield ();
 
   return tid;
 }
@@ -256,6 +263,8 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+  
+ 
 }
 
 /* Returns the name of the running thread. */
@@ -363,8 +372,16 @@ Calculate_priority_mlfqs(struct thread * cur){
 void
 thread_set_priority (int new_priority) 
 {
-  if(!thread_mlfqs)
+  if(!thread_mlfqs){   
+    lock_acquire(&set_priority_lock);
+    int old_priority = thread_current ()->priority;
     thread_current ()->priority = new_priority;
+    lock_release(&set_priority_lock);
+  
+    // If current thread's priority is decreased, it must yield the CPU
+    if (new_priority < old_priority)
+      thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -645,6 +662,7 @@ schedule (void)
 
   if (cur != next)
     prev = switch_threads (cur, next);
+    
   thread_schedule_tail (prev);
 }
 
