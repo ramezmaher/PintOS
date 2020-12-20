@@ -184,7 +184,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
   thread_tick ();
 
   if(thread_mlfqs){
-
     // Incements the cpu time for running thread.
     incremet_recent_cpu(thread_current());
 
@@ -198,7 +197,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
     if(timer_ticks() % 4 == 0){
       calculate_priority_for_all();
     }
-
   }
   
   bool flag = false; //to check if any threads are ready or not

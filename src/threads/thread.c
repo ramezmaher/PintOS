@@ -47,7 +47,7 @@ static struct real Load_average;
 static struct lock load_avg_lock; 
 
 /*  Number of ready threads.  */
-int ready_threads;
+static int ready_threads;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -373,7 +373,6 @@ thread_foreach (thread_action_func *func, void *aux)
       struct thread *t = list_entry (e, struct thread, allelem);
       func (t, aux);
     }
-    debug_backtrace();
 }
 
 /* Calculates priority for 4.4BSD Scheduler. */
@@ -443,7 +442,9 @@ int
 thread_get_load_avg (void) 
 {
   int load;
+  lock_acquire(&load_avg_lock);
   load = get_int_roundOff(mul_real_int(Load_average,100));
+  lock_release(&load_avg_lock);
   return load;
 }
 
@@ -461,6 +462,7 @@ thread_get_recent_cpu (void)
 
 void 
 calculate_load_avg(void){
+  lock_acquire(&load_avg_lock);
   struct real f1 = get_real_fraction(50,60);
   struct real f2 = get_real_fraction(1,60);
   printf("f1-%d\n",f1.val);
@@ -472,6 +474,7 @@ calculate_load_avg(void){
   printf("%d\n",ready_threads);
   Load_average = add_real_real(f1,f2);
   printf("l-%d\n",get_int_roundOff(Load_average));
+  lock_release(&load_avg_lock);
 }
 
 /* Increment recent cpu time for the running thread. */
@@ -480,11 +483,11 @@ incremet_recent_cpu(struct thread *cur){
   ASSERT(is_thread(cur));
   ASSERT(cur->status == THREAD_RUNNING);
   cur -> recent_cpu_time = add_real_int(cur -> recent_cpu_time , 1);
-  printf("%d\n",get_int_truncate(cur ->recent_cpu_time));
 }
 
 void 
 calculate_recent_cpu(struct thread *cur,void * aux UNUSED){
+
   ASSERT(is_thread(cur));
   if(cur != idle_thread){
     struct real f1,f2;
@@ -499,13 +502,17 @@ calculate_recent_cpu(struct thread *cur,void * aux UNUSED){
 /* Calculates recent cpu time for all threads except idle. */
 void
 calculate_recent_cpu_for_all(void){
+  enum intr_level old_value = intr_disable();
   thread_foreach(calculate_recent_cpu,NULL);
+  intr_set_level(old_value);
 }
 
 /* Calculates the priorities for all threads, in advanced schedular mode. */
 void
 calculate_priority_for_all(void){
+  enum intr_level old_value = intr_disable();
   thread_foreach(Calculate_priority_mlfqs,NULL);
+  intr_set_level(old_value);
 }
 
 
@@ -655,6 +662,7 @@ next_thread_to_run (void)
   	if (!list_empty (&ready_list[i]))
   		return list_entry (list_pop_front (&ready_list[i]), struct thread, elem);
   }
+  ready_threads--;
   return idle_thread;
 
 }
