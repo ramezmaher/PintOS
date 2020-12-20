@@ -178,9 +178,29 @@ timer_print_stats (void)
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
-{
+{ 
+
   ticks++;
   thread_tick ();
+
+  if(thread_mlfqs){
+
+    // Incements the cpu time for running thread.
+    incremet_recent_cpu(thread_current());
+
+    // If ticks is a number of full seconds, calculate the load_avg and all threads' recent cpu-time 
+    if(timer_ticks() % TIMER_FREQ == 0){
+      calculate_load_avg();
+      calculate_recent_cpu_for_all();
+    }
+
+    // After each time slice (4 ticks) recalculate priorities
+    if(timer_ticks() % 4 == 0){
+      calculate_priority_for_all();
+    }
+
+  }
+  
   bool flag = false; //to check if any threads are ready or not
 
   while(!list_empty(&sleeping)) //loop until the list is empty
