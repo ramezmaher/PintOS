@@ -40,6 +40,9 @@ static struct lock tid_lock;
 /* Lock used by thread_set_priority(). */
 static struct lock set_priority_lock;
 
+/* Load average which estimates the average number of threads ready to run over the past minute.*/
+struct real Load_average;
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -104,6 +107,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->niceness = 0;
+  initial_thread->recent_cpu_time = get_real(0);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -186,9 +191,17 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  init_thread (t, name, priority);
-  tid = t->tid = allocate_tid ();
+  if(thread_mlfqs){
+    /* 4.4BSD Scheduler initialization*/
 
+    /*    TO DO: Figure out how to get parent's niceness and cpu time   */
+
+  }
+  else{
+    /* Default Priority Scheduler initialization*/
+    init_thread (t, name, priority);
+    tid = t->tid = allocate_tid ();
+  }
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -346,19 +359,29 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* Calculates priority for 4.4BSD Scheduler. */
+void
+Calculate_priority_mlfqs(struct thread * cur){
+  struct real f;
+  f = div_real_int(cur->recent_cpu_time, 4);
+  f = sub_real_int(f, (2 * cur->priority ));
+  cur ->priority = PRI_MAX - get_int_truncate(f);
+} 
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  lock_acquire(&set_priority_lock);
-  int old_priority = thread_current ()->priority;
-  thread_current ()->priority = new_priority;
-  lock_release(&set_priority_lock);
+  if(!thread_mlfqs){   
+    lock_acquire(&set_priority_lock);
+    int old_priority = thread_current ()->priority;
+    thread_current ()->priority = new_priority;
+    lock_release(&set_priority_lock);
   
-  // If current thread's priority is decreased, it must yield the CPU
-  if (new_priority < old_priority)
-    thread_yield();  
-  
+    // If current thread's priority is decreased, it must yield the CPU
+    if (new_priority < old_priority)
+      thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -370,34 +393,58 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  struct thread *cur = thread_current ();
+  if(thread_mlfqs && cur != idle_thread){
+    cur -> niceness = nice;
+    Calculate_priority_mlfqs(cur);
+
+    /* TO-DO: yeild if priority higher than running thread. */
+
+  }
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->niceness;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return get_int_roundOff(mul_real_int(Load_average,100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  struct thread * cur = thread_current();
+  if(cur != idle_thread){
+    return get_int_roundOff(mul_real_int(cur->recent_cpu_time,100));
+  }
+  else
+    return 0;
 }
+
+void 
+calculate_load_avg(void){
+
+  /*    TO DO   */
+
+}
+
+void 
+calculate_recent_cpu(void){
+
+  /*    TO DO   */
+
+}
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -485,6 +532,32 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->magic = THREAD_MAGIC;
+
+  old_level = intr_disable ();
+  list_push_back (&all_list, &t->allelem);
+  intr_set_level (old_level);
+}
+
+/*  
+  * Does the initialization in case of advanced scheduling  
+*/
+static void
+init_thread_mlfqs (struct thread *t, const char *name, int nice, struct real cpu_time)
+{
+  enum intr_level old_level;
+
+  ASSERT (t != NULL);
+  ASSERT ( -20 <= nice && nice >= 20);
+  //ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
+  ASSERT (name != NULL);
+
+  memset (t, 0, sizeof *t);
+  t->status = THREAD_BLOCKED;
+  strlcpy (t->name, name, sizeof t->name);
+  t->stack = (uint8_t *) t + PGSIZE;
+  t->recent_cpu_time = cpu_time;
+  t->niceness = nice;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -605,6 +678,23 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+
+bool
+list_less (const struct list_elem *a, const struct list_elem *b, void *aux) //function to compute the thread that has less wake up time
+{
+
+    struct thread *x = list_entry(a, struct thread, elem); //first thread
+    struct thread *y = list_entry(b, struct thread, elem); //second thread
+
+    if (x->wakeup < y->wakeup)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 /* Offset of `stack' member within `struct thread'.
