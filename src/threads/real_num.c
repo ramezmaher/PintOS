@@ -27,6 +27,13 @@ struct real get_real(int i){
     f.val = i << 14;
     return f;
 }
+/*      Given two integers x,y return x/y in fixed point format     */
+struct real get_real_fraction(int x, int y){
+    struct real f1,f2;
+    f1 = get_real(x);
+    f2 = get_real(y);
+    return div_real_real(f1,f2);
+}
 /*      Returns real n = real x + int y     */
 struct real add_real_int(struct real x,int y){
     struct real n;
@@ -61,7 +68,7 @@ struct real mul_real_int(struct real x,int y){
 /*      The first real number is cast to 64-bit integer to avoid overflow of the multiplication.    */
 struct real mul_real_real(struct real x,struct real y){
     struct real n;
-    n.val = (((__int64_t) x.val) * y.val ) >> 14;
+    n.val = (((int64_t) x.val) * y.val ) >> 14;
     return n;
 } 
 /*      Returns real n = real x / int y       */
