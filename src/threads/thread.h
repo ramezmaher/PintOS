@@ -110,12 +110,6 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
-/* Variable that estimates the average number of threads ready to run over the past minute. */
-extern struct real Load_average;
-
-/* Variable to store number of ready threads. */
-extern int ready_threads;
-
 void thread_init (void);
 void thread_start (void);
 
@@ -154,7 +148,8 @@ int thread_get_load_avg (void);
 
 /* Added functions */
 void calculate_load_avg(void);
-void calculate_recent_cpu(struct thread *cur);
-void Calculate_priority_mlfqs(struct thread * cur);
+void calculate_recent_cpu_for_all(void);
+void calculate_priority_for_all(void);
+void incremet_recent_cpu(struct thread *cur);
 
 #endif /* threads/thread.h */
