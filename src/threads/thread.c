@@ -224,10 +224,6 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  
-  if (priority > thread_current ()->priority)
-    thread_yield ();
-
   return tid;
 }
 
@@ -262,13 +258,16 @@ thread_unblock (struct thread *t)
   ASSERT (is_thread (t));
 
   old_level = intr_disable ();
+  struct thread* cur = thread_current ();
   ASSERT (t->status == THREAD_BLOCKED);
   int priority = t->priority;
   list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
   
- 
+  if (cur != idle_thread && priority > cur->priority)
+    thread_yield();
+  
 }
 
 /* Returns the name of the running thread. */
@@ -372,7 +371,7 @@ Calculate_priority_mlfqs(struct thread * cur,void *aux UNUSED){
     struct real f;
     int Priority;
     f = div_real_int(cur->recent_cpu_time, 4);
-    f = sub_real_int(f, (2 * cur->priority ));
+    f = add_real_int(f, (2 * cur->niceness));
     Priority = PRI_MAX - get_int_truncate(f);
     if(Priority > PRI_MAX )
       cur -> priority = PRI_MAX;
@@ -414,8 +413,12 @@ thread_set_nice (int nice)
   ASSERT(-20 <= nice && nice <= 20);
   struct thread *cur = thread_current ();
   if(thread_mlfqs && cur != idle_thread){
+    int priority = cur->priority; 
     cur -> niceness = nice;
     Calculate_priority_mlfqs(cur,NULL);
+    if(priority <= cur->priority){
+      thread_yield();
+    }
   }
 }
 
