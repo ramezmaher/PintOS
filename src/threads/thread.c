@@ -77,9 +77,12 @@ static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
+static void mlfqs_initialize_thread (struct thread *, const char *name, int nice,struct real cpu_time);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
+void Calculate_priority_mlfqs(struct thread * cur);
+void calculate_recent_cpu(struct thread *cur,void * aux UNUSED);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
@@ -201,15 +204,15 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   if(thread_mlfqs){
     /* 4.4BSD Scheduler initialization*/
-
-    /*    TO DO: Figure out how to get parent's niceness and cpu time   */
-
+    int nice = thread_current() -> niceness;
+    struct real cpu_time = thread_current() -> recent_cpu_time; 
+    mlfqs_initialize_thread(t, name, nice,cpu_time);
   }
   else{
     /* Default Priority Scheduler initialization*/
     init_thread (t, name, priority);
-    tid = t->tid = allocate_tid ();
   }
+  tid = t->tid = allocate_tid ();
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -227,6 +230,7 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
+
   
   if (priority > thread_current ()->priority)
     thread_yield ();
@@ -245,8 +249,8 @@ thread_block (void)
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
-
   thread_current ()->status = THREAD_BLOCKED;
+  ready_threads--;
   schedule ();
 }
 
@@ -270,6 +274,7 @@ thread_unblock (struct thread *t)
   int priority = t->priority;
   list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
+  ready_threads++;
   intr_set_level (old_level);
   
 }
@@ -345,6 +350,7 @@ thread_yield (void)
     list_push_back (&ready_list[priority], &cur->elem);
   }
   cur->status = THREAD_READY;
+  
   schedule ();
   intr_set_level (old_level);
 }
@@ -418,7 +424,6 @@ thread_set_nice (int nice)
   if(thread_mlfqs && cur != idle_thread){
     cur -> niceness = nice;
     Calculate_priority_mlfqs(cur);
-    thread_yield();
   }
 }
 
@@ -463,8 +468,16 @@ calculate_load_avg(void){
   lock_release(&load_avg_lock);
 }
 
+/* Increment recent cpu time for the running thread. */
+void
+incremet_recent_cpu(void){
+  struct thread * cur = thread_current();
+  cur -> recent_cpu_time = add_real_int(cur -> recent_cpu_time , 1);
+}
+
 void 
-calculate_recent_cpu(struct thread *cur){
+calculate_recent_cpu(struct thread *cur,void * aux UNUSED){
+  lock_acquire(&load_avg_lock);
   ASSERT(is_thread(cur));
   if(cur != idle_thread){
     struct real f1,f2;
@@ -474,6 +487,18 @@ calculate_recent_cpu(struct thread *cur){
     f2 = mul_real_real(f1,cur->recent_cpu_time);
     cur->recent_cpu_time = add_real_int(f2,cur->niceness);
   }
+  lock_release(&load_avg_lock);
+}
+
+/* Calculates recent cpu time for all threads except idle. */
+void
+calculate_recent_cpu_for_all(void){
+  enum intr_level old_level;
+
+  old_level = intr_disable();
+  thread_foreach(calculate_recent_cpu,NULL);
+  intr_set_level(old_level);
+
 }
 
 
@@ -574,13 +599,12 @@ init_thread (struct thread *t, const char *name, int priority)
   * Does the initialization in case of advanced scheduling  
 */
 static void
-init_thread_mlfqs (struct thread *t, const char *name, int nice, struct real cpu_time)
+mlfqs_initialize_thread(struct thread *t, const char *name, int nice, struct real cpu_time)
 {
   enum intr_level old_level;
 
   ASSERT (t != NULL);
   ASSERT ( -20 <= nice && nice <= 20);
-  //ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
 
   memset (t, 0, sizeof *t);
@@ -588,11 +612,12 @@ init_thread_mlfqs (struct thread *t, const char *name, int nice, struct real cpu
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->recent_cpu_time = cpu_time;
-  t->niceness = nice;
+  t -> niceness = nice;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
+  Calculate_priority_mlfqs(t);
   intr_set_level (old_level);
 }
 
@@ -712,7 +737,7 @@ allocate_tid (void)
 }
 
 bool
-list_less (const struct list_elem *a, const struct list_elem *b, void *aux) //function to compute the thread that has less wake up time
+list_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) //function to compute the thread that has less wake up time
 {
 
     struct thread *x = list_entry(a, struct thread, elem); //first thread
