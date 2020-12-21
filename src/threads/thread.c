@@ -43,6 +43,8 @@ static struct lock set_priority_lock;
 /* Load average which estimates the average number of threads ready to run over the past minute.*/
 static struct real Load_average;
 
+/* Lock for calculating */
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -199,7 +201,10 @@ thread_create (const char *name, int priority,
     /* 4.4BSD Scheduler initialization*/
     int nice = thread_current() -> niceness;
     struct real cpu_time = thread_current() -> recent_cpu_time;
-    mlfqs_initialize_thread(t, name, nice,cpu_time);
+    if( strcmp(name,"idle") == 0 )
+      mlfqs_initialize_thread(t, name, 20,cpu_time);
+    else  
+      mlfqs_initialize_thread(t, name, nice,cpu_time);
   }
   else{
     /* Default Priority Scheduler initialization*/
@@ -372,11 +377,8 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 Calculate_priority_mlfqs(struct thread * cur,void *aux UNUSED){
   if(cur != idle_thread){
-    struct real f;
     int Priority;
-    f = div_real_int(cur->recent_cpu_time, 4);
-    f = add_real_int(f, (2 * cur->niceness));
-    Priority = PRI_MAX - get_int_truncate(f);
+    Priority = PRI_MAX - get_int_roundOff(div_real_int(cur->recent_cpu_time,4)) - (cur->niceness * 2);
     if(Priority > PRI_MAX )
       cur -> priority = PRI_MAX;
     else if(Priority < PRI_MIN)
@@ -419,13 +421,27 @@ thread_set_nice (int nice)
 {
   ASSERT(-20 <= nice && nice <= 20);
   struct thread *cur = thread_current ();
-  if(thread_mlfqs && cur != idle_thread){
-    cur -> niceness = nice;
-    Calculate_priority_mlfqs(cur,NULL);
-    int priority = cur ->priority;
-    struct thread *next = show_next_thread_to_run();
-    if(next->priority < priority)
-      thread_yield();
+  if(thread_mlfqs){
+    if(cur != idle_thread){
+      cur -> niceness = nice;
+      Calculate_priority_mlfqs(cur,NULL);
+      if(cur->status == THREAD_READY){
+        enum intr_level old_value = intr_disable();
+        list_remove(&cur->elem);
+        list_insert_ordered(&ready_list,&cur->elem,list_less_threads,NULL);
+        intr_set_level(old_value);
+      }
+      else if(cur->status == THREAD_RUNNING){
+        struct thread *next = show_next_thread_to_run();
+        if(cur -> priority > next->priority)
+          thread_yield();
+      }
+    }
+    //if idle thread.
+    else{
+      cur->niceness = 20;
+      cur -> priority = PRI_MIN;
+    }
   }
 }
 
@@ -459,9 +475,7 @@ void
 calculate_load_avg(void){
   enum intr_level old_value = intr_disable();
   int ready_threads = 0;
-  for (int i = PRI_MIN ; i <= PRI_MAX ; i++){
-    ready_threads += list_size(&ready_list);
-  }
+  ready_threads += list_size(&ready_list);
   if(thread_current() != idle_thread){
     ready_threads++;
   }
@@ -507,7 +521,8 @@ void
 calculate_priority_for_all(void){
   enum intr_level old_value = intr_disable(); 
   thread_foreach(Calculate_priority_mlfqs,NULL);
-  list_sort(&ready_list,list_less_threads,NULL);
+  if(!list_empty(&ready_list))
+    list_sort(&ready_list,list_less_threads,NULL);
   intr_set_level(old_value);
 }
 
