@@ -43,12 +43,6 @@ static struct lock set_priority_lock;
 /* Load average which estimates the average number of threads ready to run over the past minute.*/
 static struct real Load_average;
 
-/* Load average calculation lock. */
-static struct lock load_avg_lock; 
-
-/*  Number of ready threads.  */
-static int ready_threads;
-
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -106,7 +100,6 @@ thread_init (void)
 
   lock_init (&tid_lock);
   lock_init (&set_priority_lock);
-  lock_init (&load_avg_lock);
   int i;
   for (i = 0; i <= PRI_MAX; i++)
   	list_init (&ready_list[i]);
@@ -116,7 +109,6 @@ thread_init (void)
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
-  ready_threads++;
   initial_thread->tid = allocate_tid ();
   initial_thread->niceness = 0;
   initial_thread->recent_cpu_time = get_real(0);
@@ -251,7 +243,6 @@ thread_block (void)
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
   thread_current ()->status = THREAD_BLOCKED;
-  ready_threads--;
   schedule ();
 }
 
@@ -275,7 +266,6 @@ thread_unblock (struct thread *t)
   int priority = t->priority;
   list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
-  ready_threads++;
   intr_set_level (old_level);
   
  
@@ -330,7 +320,6 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
-  ready_threads--;
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -441,11 +430,7 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  int load;
-  lock_acquire(&load_avg_lock);
-  load = get_int_roundOff(mul_real_int(Load_average,100));
-  lock_release(&load_avg_lock);
-  return load;
+  return (get_int_roundOff(mul_real_int(Load_average,100)));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -462,19 +447,20 @@ thread_get_recent_cpu (void)
 
 void 
 calculate_load_avg(void){
-  lock_acquire(&load_avg_lock);
-  struct real f1 = get_real_fraction(50,60);
+  enum intr_level old_value = intr_disable(); 
+  int ready_threads = 0;
+  for (int i = PRI_MIN ; i <= PRI_MAX ; i++){
+    ready_threads += list_size(&ready_list[i]);
+  }
+  if(thread_current() != idle_thread){
+    ready_threads++;
+  }
+  struct real f1 = get_real_fraction(59,60);
   struct real f2 = get_real_fraction(1,60);
-  printf("f1-%d\n",f1.val);
-  printf("f2-%d\n",f2.val);
   f1 = mul_real_real(f1,Load_average);
-  printf("f11-%d\n",f1.val);
   f2 = mul_real_int(f2, ready_threads);
-  printf("f22-%d\n",f2.val);
-  printf("%d\n",ready_threads);
   Load_average = add_real_real(f1,f2);
-  printf("l-%d\n",get_int_roundOff(Load_average));
-  lock_release(&load_avg_lock);
+  intr_set_level(old_value);
 }
 
 /* Increment recent cpu time for the running thread. */
@@ -662,7 +648,6 @@ next_thread_to_run (void)
   	if (!list_empty (&ready_list[i]))
   		return list_entry (list_pop_front (&ready_list[i]), struct thread, elem);
   }
-  ready_threads--;
   return idle_thread;
 
 }
