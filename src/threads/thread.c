@@ -28,6 +28,8 @@ static struct list ready_list[PRI_MAX+1];
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+struct list sleeping; //list for threads during sleep time
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -79,7 +81,7 @@ void Calculate_priority_mlfqs(struct thread * cur,void *aux UNUSED);
 void calculate_recent_cpu(struct thread *cur,void * aux UNUSED);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-
+static bool wakeup_sleeping_threads(int64_t ticks);
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -135,9 +137,11 @@ thread_start (void)
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
-thread_tick (void) 
+thread_tick (int64_t ticks) 
 {
   struct thread *t = thread_current ();
+
+  wakeup_sleeping_threads(ticks);
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -152,6 +156,24 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();  
+}
+
+/*  Wakeup sleeping threads. */
+static bool wakeup_sleeping_threads(int64_t ticks){  
+  bool flag = false; //to check if any threads are ready or not
+  while(!list_empty(&sleeping)) //loop until the list is empty
+  {
+    struct list_elem *elemFront = list_front(&sleeping); //top element of the ordered list
+    struct thread *elemThread = list_entry(elemFront, struct thread, elem); //the thread of the top element of the ordered list
+    if (elemThread->wakeup > ticks) //finished all threads that should wake up
+    {
+        break;
+    }
+    list_remove(elemFront); //remove the element from the list
+    thread_unblock(elemThread); //unblock the thread
+    flag = true; //threads are ready in the ready queue
+  }
+  return flag;
 }
 
 /* Prints thread statistics. */

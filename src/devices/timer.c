@@ -17,8 +17,6 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
-struct list sleeping; //list for threads during sleep time
-
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -179,9 +177,8 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 { 
-
   ticks++;
-  thread_tick ();
+  thread_tick (ticks);
 
   if(thread_mlfqs){
     // Incements the cpu time for running thread.
@@ -197,26 +194,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
     if(timer_ticks() % 4 == 0){
       calculate_priority_for_all();
     }
-  }
-  
-  bool flag = false; //to check if any threads are ready or not
-
-  while(!list_empty(&sleeping)) //loop until the list is empty
-  {
-    struct list_elem *elemFront = list_front(&sleeping); //top element of the ordered list
-    struct thread *elemThread = list_entry(elemFront, struct thread, elem); //the thread of the top element of the ordered list
-    if (elemThread->wakeup > ticks) //finished all threads that should wake up
-    {
-        break;
-    }
-    list_remove(elemFront); //remove the element from the list
-    thread_unblock(elemThread); //unblock the thread
-    flag = true; //threads are ready in the ready queue
-  }
-
-  if(flag)
-  {
-      intr_yield_on_return();
   }
 }
 
