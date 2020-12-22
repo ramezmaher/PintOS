@@ -148,6 +148,7 @@ bool list_less (const struct list_elem*, const struct list_elem*, void *);
 
 bool list_less_threads(const struct list_elem *a, const struct list_elem *b, void *aux); 
 bool locks_list_less (const struct list_elem* a, const struct list_elem* b, void* aux);
+void thread_add_lock (struct thread* t, struct lock* lock);
 
 /* Methods for 4.4BSD Scheduling */
 
