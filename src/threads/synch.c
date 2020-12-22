@@ -51,9 +51,7 @@ sema_init (struct semaphore *sema, unsigned value)
 
   sema->value = value;
   sema->num_waiters = 0;
-  int i;
-  for (i = 0; i <= PRI_MAX; i++)
-    list_init (&sema->waiters[i]);
+  list_init (&sema->waiters);
 
 }
 
@@ -73,7 +71,6 @@ sema_down (struct semaphore *sema)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  int priority = thread_current ()->priority;
   if (sema->value == 0)
     {
       list_insert_ordered (&sema->waiters, &thread_current ()->elem, list_less_threads, NULL);
@@ -310,7 +307,7 @@ struct semaphore_elem
 void
 cond_init (struct condition *cond)
 {
-  ASSERT (cond != NULL);
+ ASSERT (cond != NULL);
 
   cond->num_waiters = 0;
   int i;
@@ -341,7 +338,7 @@ cond_init (struct condition *cond)
 void
 cond_wait (struct condition *cond, struct lock *lock)
 {
-  struct semaphore_elem waiter;
+ struct semaphore_elem waiter;
 
   ASSERT (cond != NULL);
   ASSERT (lock != NULL);
@@ -383,7 +380,6 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
       break;
     }
   }
-
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -403,3 +399,4 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     cond_signal (cond, lock);
   }
 }
+
