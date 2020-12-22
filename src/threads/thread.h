@@ -110,6 +110,8 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
+extern struct list sleeping; //list for threads during sleep time
+
 void thread_init (void);
 void thread_start (void);
 
@@ -137,6 +139,8 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 
 bool list_less (const struct list_elem*, const struct list_elem*, void *);
+
+bool list_less_threads(const struct list_elem *a, const struct list_elem *b, void *aux); 
 
 /* Methods for 4.4BSD Scheduling */
 
