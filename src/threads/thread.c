@@ -43,6 +43,9 @@ static struct lock set_priority_lock;
 /* Load average which estimates the average number of threads ready to run over the past minute.*/
 static struct real Load_average;
 
+/* Used to lock thread creation process. */
+static struct lock creation_lock;
+
 /* Lock for calculating */
 
 /* Stack frame for kernel_thread(). */
@@ -103,6 +106,7 @@ thread_init (void)
   /* Initialize locks. */
   lock_init (&tid_lock);
   lock_init (&set_priority_lock);
+  lock_init (&creation_lock);
   
   /* Initialize lists. */
   list_init (&ready_list);
@@ -183,6 +187,7 @@ tid_t
 thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
+  
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -229,11 +234,6 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
-
-  if(thread_mlfqs){
-    if(t->priority > thread_current()->priority)
-      thread_yield();
-  }
 
   return tid;
 }
@@ -358,8 +358,8 @@ thread_yield (void)
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
-void
-thread_foreach (thread_action_func *func, void *aux)
+
+void thread_foreach (thread_action_func *func, void *aux)
 {
   struct list_elem *e;
 
@@ -425,12 +425,14 @@ thread_set_nice (int nice)
     if(cur != idle_thread){
       cur -> niceness = nice;
       Calculate_priority_mlfqs(cur,NULL);
+      /* If thread is ready then re put it on the list with the new priority. */
       if(cur->status == THREAD_READY){
         enum intr_level old_value = intr_disable();
         list_remove(&cur->elem);
         list_insert_ordered(&ready_list,&cur->elem,list_less_threads,NULL);
         intr_set_level(old_value);
       }
+      /* Else if it is running then get the next one to run and compare their priorities. */
       else if(cur->status == THREAD_RUNNING){
         struct thread *next = show_next_thread_to_run();
         if(cur -> priority > next->priority)
@@ -464,16 +466,14 @@ int
 thread_get_recent_cpu (void) 
 {
   struct thread * cur = thread_current();
-  if(cur != idle_thread){
-    return get_int_roundOff(mul_real_int(cur->recent_cpu_time,100));
-  }
-  else
-    return 0;
+  return get_int_roundOff(mul_real_int(cur->recent_cpu_time,100));
 }
 
+/* Calculates the moving load average, this methos is called by interrupt handler
+   when timer ticks % number of ticks per second == 0.*/
 void 
 calculate_load_avg(void){
-  enum intr_level old_value = intr_disable();
+  enum intr_level old = intr_disable();
   int ready_threads = 0;
   ready_threads += list_size(&ready_list);
   if(thread_current() != idle_thread){
@@ -484,7 +484,7 @@ calculate_load_avg(void){
   f1 = mul_real_real(f1,Load_average);
   f2 = mul_real_int(f2, ready_threads);
   Load_average = add_real_real(f1,f2);
-  intr_set_level(old_value);
+  intr_set_level(old);
 }
 
 /* Increment recent cpu time for the running thread. */
@@ -494,36 +494,34 @@ incremet_recent_cpu(struct thread *cur){
   cur -> recent_cpu_time = add_real_int(cur -> recent_cpu_time , 1);
 }
 
+/*  Calculates recent cpu time for a given thread,
+    it is called for all threads when timer ticks % number of ticks per second == 0.*/
 void 
 calculate_recent_cpu(struct thread *cur,void * aux UNUSED){
-
-  ASSERT(is_thread(cur));
-  if(cur != idle_thread){
     struct real f1,f2;
     f1 = mul_real_int(Load_average,2);
     f2 = add_real_int(f1,1);
     f1 = div_real_real(f1,f2);
     f2 = mul_real_real(f1,cur->recent_cpu_time);
     cur->recent_cpu_time = add_real_int(f2,cur->niceness);
-  }
 }
 
-/* Calculates recent cpu time for all threads except idle. */
+/* Calculates recent cpu time for all threads. */
 void
-calculate_recent_cpu_for_all(void){
-  enum intr_level old_value = intr_disable(); 
+calculate_recent_cpu_for_all(void){ 
+  enum intr_level old = intr_disable();
   thread_foreach(calculate_recent_cpu,NULL);
-  intr_set_level(old_value);
+  intr_set_level(old);
 }
 
 /* Calculates the priorities for all threads, in advanced schedular mode. */
 void
 calculate_priority_for_all(void){
-  enum intr_level old_value = intr_disable(); 
+  enum intr_level old = intr_disable();
   thread_foreach(Calculate_priority_mlfqs,NULL);
   if(!list_empty(&ready_list))
     list_sort(&ready_list,list_less_threads,NULL);
-  intr_set_level(old_value);
+  intr_set_level(old);
 }
 
 
