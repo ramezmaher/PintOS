@@ -28,8 +28,6 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
-struct list sleeping; //list for threads during sleep time
-
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -44,9 +42,6 @@ static struct lock set_priority_lock;
 
 /* Load average which estimates the average number of threads ready to run over the past minute.*/
 static struct real Load_average;
-
-/* Used to lock thread creation process. */
-static struct lock load_avg_lock;
 
 /* Lock for calculating */
 
@@ -110,7 +105,6 @@ thread_init (void)
   /* Initialize locks. */
   lock_init (&tid_lock);
   lock_init (&set_priority_lock);
-  lock_init (&load_avg_lock);
   
   /* Initialize lists. */
   list_init (&ready_list);
@@ -163,24 +157,6 @@ thread_tick ()
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();  
-}
-
-/*  Wakeup sleeping threads. */
-static bool wakeup_sleeping_threads(int64_t ticks){  
-  bool flag = false; //to check if any threads are ready or not
-  while(!list_empty(&sleeping)) //loop until the list is empty
-  {
-    struct list_elem *elemFront = list_front(&sleeping); //top element of the ordered list
-    struct thread *elemThread = list_entry(elemFront, struct thread, elem); //the thread of the top element of the ordered list
-    if (elemThread->wakeup > ticks) //finished all threads that should wake up
-    {
-        break;
-    }
-    list_remove(elemFront); //remove the element from the list
-    thread_unblock(elemThread); //unblock the thread
-    flag = true; //threads are ready in the ready queue
-  }
-  return flag;
 }
 
 /* Prints thread statistics. */
@@ -304,6 +280,7 @@ thread_unblock (struct thread *t)
     }  
   }
 }
+/*  TO DO   */
 
 /* Returns the name of the running thread. */
 const char *
@@ -437,6 +414,7 @@ thread_set_priority (int new_priority)
 void
 thread_donate_priority (struct thread* t)
 {
+  if(!thread_mlfqs){
   enum intr_level old_level = intr_disable (); 
   int old_priority = t->priority;
   thread_refresh_priority (t);
@@ -448,11 +426,13 @@ thread_donate_priority (struct thread* t)
     list_insert_ordered (&ready_list, &t->elem, list_less_threads, NULL);
   }
   intr_set_level (old_level);
+  }
 }
 
 // Updates this thread's priority
 void thread_refresh_priority (struct thread* t)
 {
+  if(!thread_mlfqs){
   enum intr_level old_level = intr_disable ();
   int max_priority = t->initial_priority;
   if (!list_empty (&t->locks_acquired))
@@ -464,23 +444,27 @@ void thread_refresh_priority (struct thread* t)
       max_priority = max_lock_priority; 
   }
   t->priority = max_priority;
-  
-  intr_set_level (old_level); 
+  intr_set_level (old_level);
+  } 
 }
 
 // Adds lock to this thread's acquired locks list
 void thread_add_lock (struct thread* t, struct lock* lock)
 {
-  if (t->priority > lock->priority)
-    lock->priority = t->priority;
-  list_push_back (&t->locks_acquired, &lock->elem);
+  if(!thread_mlfqs){
+    if (t->priority > lock->priority)
+      lock->priority = t->priority;
+    list_push_back (&t->locks_acquired, &lock->elem);
+  }
 }
 
 // Removes lock from this thread's acquired locks list
 void thread_remove_lock (struct thread* t, struct lock* lock)
 {
-  list_remove (&lock->elem);
-  thread_refresh_priority (t);
+  if(!thread_mlfqs){
+    list_remove (&lock->elem);
+    thread_refresh_priority (t);
+  }
 }
 
 /* Returns the current thread's priority. */

@@ -118,7 +118,7 @@ extern struct list sleeping; //list for threads during sleep time
 void thread_init (void);
 void thread_start (void);
 
-void thread_tick (int64_t ticks);
+void thread_tick (void);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
@@ -148,6 +148,7 @@ bool list_less (const struct list_elem*, const struct list_elem*, void *);
 
 bool list_less_threads(const struct list_elem *a, const struct list_elem *b, void *aux); 
 bool locks_list_less (const struct list_elem* a, const struct list_elem* b, void* aux);
+void thread_add_lock (struct thread* t, struct lock* lock);
 
 /* Methods for 4.4BSD Scheduling */
 
