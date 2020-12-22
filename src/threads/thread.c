@@ -28,6 +28,8 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+struct list sleeping; //list for threads during sleep time
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -85,6 +87,8 @@ void calculate_recent_cpu(struct thread *cur,void * aux UNUSED);
 void thread_schedule_tail (struct thread *prev);
 static struct thread * show_next_thread_to_run(void);
 static tid_t allocate_tid (void);
+
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -145,6 +149,7 @@ void
 thread_tick () 
 {
   struct thread *t = thread_current ();
+
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -158,6 +163,24 @@ thread_tick ()
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();  
+}
+
+/*  Wakeup sleeping threads. */
+static bool wakeup_sleeping_threads(int64_t ticks){  
+  bool flag = false; //to check if any threads are ready or not
+  while(!list_empty(&sleeping)) //loop until the list is empty
+  {
+    struct list_elem *elemFront = list_front(&sleeping); //top element of the ordered list
+    struct thread *elemThread = list_entry(elemFront, struct thread, elem); //the thread of the top element of the ordered list
+    if (elemThread->wakeup > ticks) //finished all threads that should wake up
+    {
+        break;
+    }
+    list_remove(elemFront); //remove the element from the list
+    thread_unblock(elemThread); //unblock the thread
+    flag = true; //threads are ready in the ready queue
+  }
+  return flag;
 }
 
 /* Prints thread statistics. */
