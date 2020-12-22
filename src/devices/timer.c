@@ -20,6 +20,8 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+struct list sleeping; //list for threads during sleep time
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -177,24 +179,41 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 { 
-  ticks++;
-  thread_tick (ticks);
 
-  if(thread_mlfqs){
+  ASSERT (intr_get_level () == INTR_OFF);
+
+  ticks++;
+  thread_tick ();
+  
+  if(thread_mlfqs){ 
     // Incements the cpu time for running thread.
     incremet_recent_cpu(thread_current());
-
     // If ticks is a number of full seconds, calculate the load_avg and all threads' recent cpu-time 
     if(timer_ticks() % TIMER_FREQ == 0){
       calculate_load_avg();
       calculate_recent_cpu_for_all();
     }
-
     // After each time slice (4 ticks) recalculate priorities
     if(timer_ticks() % 4 == 0){
       calculate_priority_for_all();
     }
   }
+
+  bool flag = false; //to check if any threads are ready or not
+  while(!list_empty(&sleeping)) //loop until the list is empty
+  {
+    struct list_elem *elemFront = list_front(&sleeping); //top element of the ordered list
+    struct thread *elemThread = list_entry(elemFront, struct thread, elem); //the thread of the top element of the ordered list
+    if (elemThread->wakeup > ticks) //finished all threads that should wake up
+    {
+        break;
+    }
+    list_remove(elemFront); //remove the element from the list
+    thread_unblock(elemThread); //unblock the thread
+    flag = true; //threads are ready in the ready queue
+  }
+  if(flag)
+    intr_yield_on_return ();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
