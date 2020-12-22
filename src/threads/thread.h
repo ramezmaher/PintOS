@@ -88,7 +88,10 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
+    int priority;                       /* Current Priority. */
+    int initial_priority;               /* Initial Priority. */
+    struct list locks_acquired;         /* List of acquired locks by this thread. */
+    struct lock* lock_waiting;          /* Lock blocking this thread. */
     struct list_elem allelem;           /* List element for all threads list. */
     int niceness;                       /* Integer between {-20,20}, indicates how likely the thread to give CPU time. */
     struct real recent_cpu_time;        /* The recent time on cpu spent by thread. */ 
@@ -137,10 +140,14 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_donate_priority (struct thread* t);
+void thread_refresh_priority (struct thread* t);
+void thread_remove_lock (struct thread* t, struct lock* lock);
 
 bool list_less (const struct list_elem*, const struct list_elem*, void *);
 
 bool list_less_threads(const struct list_elem *a, const struct list_elem *b, void *aux); 
+bool locks_list_less (const struct list_elem* a, const struct list_elem* b, void* aux);
 
 /* Methods for 4.4BSD Scheduling */
 
