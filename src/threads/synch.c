@@ -368,7 +368,7 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
  // while (!list_empty (&cond->waiters))
    // cond_signal (cond, lock);
-  while (&cond->num_waiters > 0)
+  while (cond->num_waiters > 0)
   {
     cond_signal (cond, lock);
   }
