@@ -43,9 +43,6 @@ static struct lock set_priority_lock;
 /* Load average which estimates the average number of threads ready to run over the past minute.*/
 static struct real Load_average;
 
-/* Used to lock thread creation process. */
-static struct lock load_avg_lock;
-
 /* Lock for calculating */
 
 /* Stack frame for kernel_thread(). */
@@ -85,6 +82,8 @@ void calculate_recent_cpu(struct thread *cur,void * aux UNUSED);
 void thread_schedule_tail (struct thread *prev);
 static struct thread * show_next_thread_to_run(void);
 static tid_t allocate_tid (void);
+
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -106,7 +105,6 @@ thread_init (void)
   /* Initialize locks. */
   lock_init (&tid_lock);
   lock_init (&set_priority_lock);
-  lock_init (&load_avg_lock);
   
   /* Initialize lists. */
   list_init (&ready_list);
@@ -145,6 +143,7 @@ void
 thread_tick () 
 {
   struct thread *t = thread_current ();
+
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -281,6 +280,7 @@ thread_unblock (struct thread *t)
     }  
   }
 }
+/*  TO DO   */
 
 /* Returns the name of the running thread. */
 const char *
@@ -398,14 +398,72 @@ thread_set_priority (int new_priority)
 {
   if(!thread_mlfqs){
     ASSERT( PRI_MIN <= new_priority && new_priority <= PRI_MAX);   
-    lock_acquire(&set_priority_lock);
+    enum intr_level old_level = intr_disable ();
     int old_priority = thread_current ()->priority;
-    thread_current ()->priority = new_priority;
-    lock_release(&set_priority_lock);
+    thread_current ()->initial_priority = new_priority;
+    if (new_priority < old_priority && list_empty (&thread_current ()->locks_acquired))
+      thread_current ()->priority = new_priority;
+    intr_set_level (old_level);
   
     // If current thread's priority is decreased, it must yield the CPU
     if (new_priority < old_priority)
       thread_yield();
+  }
+}
+
+void
+thread_donate_priority (struct thread* t)
+{
+  if(!thread_mlfqs){
+  enum intr_level old_level = intr_disable (); 
+  int old_priority = t->priority;
+  thread_refresh_priority (t);
+  int new_priority = t->priority;
+  // Reorder ready list
+  if (new_priority != old_priority && t->status == THREAD_READY)
+  {
+    list_remove (&t->elem);
+    list_insert_ordered (&ready_list, &t->elem, list_less_threads, NULL);
+  }
+  intr_set_level (old_level);
+  }
+}
+
+// Updates this thread's priority
+void thread_refresh_priority (struct thread* t)
+{
+  if(!thread_mlfqs){
+  enum intr_level old_level = intr_disable ();
+  int max_priority = t->initial_priority;
+  if (!list_empty (&t->locks_acquired))
+  {
+    list_sort (&t->locks_acquired, locks_list_less, NULL);
+    int max_lock_priority = list_entry (list_front (&t->locks_acquired), 
+                                        struct lock, elem)->priority;
+    if (max_lock_priority > max_priority)
+      max_priority = max_lock_priority; 
+  }
+  t->priority = max_priority;
+  intr_set_level (old_level);
+  } 
+}
+
+// Adds lock to this thread's acquired locks list
+void thread_add_lock (struct thread* t, struct lock* lock)
+{
+  if(!thread_mlfqs){
+    if (t->priority > lock->priority)
+      lock->priority = t->priority;
+    list_push_back (&t->locks_acquired, &lock->elem);
+  }
+}
+
+// Removes lock from this thread's acquired locks list
+void thread_remove_lock (struct thread* t, struct lock* lock)
+{
+  if(!thread_mlfqs){
+    list_remove (&lock->elem);
+    thread_refresh_priority (t);
   }
 }
 
@@ -608,8 +666,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
+  t->initial_priority = priority;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  
+  t->lock_waiting = NULL;
+  list_init (&t->locks_acquired);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -790,6 +852,17 @@ list_less_threads(const struct list_elem *a, const struct list_elem *b, void *au
   const struct thread *y = list_entry (b, struct thread, elem);
 
   return (x->priority > y ->priority);
+}
+
+bool
+locks_list_less (const struct list_elem* a, const struct list_elem* b, void* aux UNUSED)
+{
+  ASSERT (a != NULL);
+  ASSERT (b != NULL);
+  const struct lock* x = list_entry (a, struct lock, elem);
+  const struct lock* y = list_entry (b, struct lock, elem);
+  
+  return (x->priority > y->priority);
 }
 
 

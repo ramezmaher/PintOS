@@ -179,6 +179,7 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 { 
+
   ASSERT (intr_get_level () == INTR_OFF);
 
   ticks++;
@@ -197,6 +198,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
       calculate_priority_for_all();
     }
   }
+
   bool flag = false; //to check if any threads are ready or not
   while(!list_empty(&sleeping)) //loop until the list is empty
   {
