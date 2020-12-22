@@ -113,7 +113,7 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
-struct list ready_list; /* List of processes in THREAD_READY state, that is, processes
+extern struct list ready_list; /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 
 extern struct list sleeping; //list for threads during sleep time
