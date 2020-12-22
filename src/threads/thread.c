@@ -26,6 +26,9 @@
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/* List of all threads that are in the ready state. */
+struct list ready_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
