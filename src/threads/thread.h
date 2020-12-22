@@ -94,7 +94,7 @@ struct thread
     struct lock* lock_waiting;          /* Lock blocking this thread. */
     struct list_elem allelem;           /* List element for all threads list. */
     int niceness;                       /* Integer between {-20,20}, indicates how likely the thread to give CPU time. */
-    struct real recent_cpu_time;        /* The recent time on cpu spent by thread. */ 
+    struct real recent_cpu_time;        /* The recent time on cpu spent by thread. */
     int64_t wakeup;                     //for storing the time for each thread to wake up
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -112,6 +112,9 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+struct list ready_list; /* List of processes in THREAD_READY state, that is, processes
+   that are ready to run but not actually running. */
 
 extern struct list sleeping; //list for threads during sleep time
 
@@ -146,13 +149,13 @@ void thread_remove_lock (struct thread* t, struct lock* lock);
 
 bool list_less (const struct list_elem*, const struct list_elem*, void *);
 
-bool list_less_threads(const struct list_elem *a, const struct list_elem *b, void *aux); 
+bool list_less_threads(const struct list_elem *a, const struct list_elem *b, void *aux);
 bool locks_list_less (const struct list_elem* a, const struct list_elem* b, void* aux);
 void thread_add_lock (struct thread* t, struct lock* lock);
 
 /* Methods for 4.4BSD Scheduling */
 
-/* Initial function */  
+/* Initial function */
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
