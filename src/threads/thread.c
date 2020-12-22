@@ -44,7 +44,7 @@ static struct lock set_priority_lock;
 static struct real Load_average;
 
 /* Used to lock thread creation process. */
-static struct lock creation_lock;
+static struct lock load_avg_lock;
 
 /* Lock for calculating */
 
@@ -106,7 +106,7 @@ thread_init (void)
   /* Initialize locks. */
   lock_init (&tid_lock);
   lock_init (&set_priority_lock);
-  lock_init (&creation_lock);
+  lock_init (&load_avg_lock);
   
   /* Initialize lists. */
   list_init (&ready_list);
@@ -265,20 +265,19 @@ void
 thread_unblock (struct thread *t) 
 {
   enum intr_level old_level;
-
   ASSERT (is_thread (t));
-
   old_level = intr_disable ();
-  struct thread* cur = thread_current ();
   ASSERT (t->status == THREAD_BLOCKED);
-  int priority = t->priority;
   list_insert_ordered (&ready_list, &t->elem,list_less_threads,NULL);
   t->status = THREAD_READY;
+
+  if(!thread_mlfqs){
+    struct thread * cur = thread_current();
+    if( cur != idle_thread && cur -> priority < t -> priority)
+      thread_yield();
+  }
+
   intr_set_level (old_level);
-  
-  if (cur != idle_thread && priority > cur->priority)
-    thread_yield();
-  
 }
 
 /* Returns the name of the running thread. */
@@ -457,8 +456,8 @@ thread_get_nice (void)
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
-{
-  return (get_int_roundOff(mul_real_int(Load_average,100)));
+{ 
+ return (get_int_roundOff(mul_real_int(Load_average,100)));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -473,7 +472,7 @@ thread_get_recent_cpu (void)
    when timer ticks % number of ticks per second == 0.*/
 void 
 calculate_load_avg(void){
-  enum intr_level old = intr_disable();
+  ASSERT (intr_get_level () == INTR_OFF);
   int ready_threads = 0;
   ready_threads += list_size(&ready_list);
   if(thread_current() != idle_thread){
@@ -484,7 +483,6 @@ calculate_load_avg(void){
   f1 = mul_real_real(f1,Load_average);
   f2 = mul_real_int(f2, ready_threads);
   Load_average = add_real_real(f1,f2);
-  intr_set_level(old);
 }
 
 /* Increment recent cpu time for the running thread. */
@@ -498,7 +496,7 @@ incremet_recent_cpu(struct thread *cur){
     it is called for all threads when timer ticks % number of ticks per second == 0.*/
 void 
 calculate_recent_cpu(struct thread *cur,void * aux UNUSED){
-    struct real f1,f2;
+    struct real f1,f2;   
     f1 = mul_real_int(Load_average,2);
     f2 = add_real_int(f1,1);
     f1 = div_real_real(f1,f2);
@@ -509,19 +507,17 @@ calculate_recent_cpu(struct thread *cur,void * aux UNUSED){
 /* Calculates recent cpu time for all threads. */
 void
 calculate_recent_cpu_for_all(void){ 
-  enum intr_level old = intr_disable();
+  ASSERT (intr_get_level () == INTR_OFF);
   thread_foreach(calculate_recent_cpu,NULL);
-  intr_set_level(old);
 }
 
 /* Calculates the priorities for all threads, in advanced schedular mode. */
 void
 calculate_priority_for_all(void){
-  enum intr_level old = intr_disable();
+  ASSERT (intr_get_level () == INTR_OFF);
   thread_foreach(Calculate_priority_mlfqs,NULL);
   if(!list_empty(&ready_list))
     list_sort(&ready_list,list_less_threads,NULL);
-  intr_set_level(old);
 }
 
 
