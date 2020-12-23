@@ -13,7 +13,7 @@
 struct semaphore 
   {
     unsigned value;                        /* Current value. */
-    struct list waiters[PRI_MAX+1];        /* List of waiting threads. */
+    struct list waiters;        /* List of waiting threads. */
     int num_waiters;                       /* Number of waiting threads. */
   };
 
