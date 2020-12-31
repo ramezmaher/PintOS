@@ -1,0 +1,283 @@
+			+--------------------+
+			|        CS 140      |
+			| PROJECT 1: THREADS |
+			|   DESIGN DOCUMENT  |
+			+--------------------+
+				   
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Ramez Soliman <ramezmaher@hotmail.com>
+Seif Ehab <seif_hunterman@yahoo.com>
+Abdelrahman Adel <A.adel.a.fattah@gmail.com>
+Youssef Sherif <es-youssefsherif2022@alexu.edu.eg>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+			     ALARM CLOCK
+			     ===========
+
+---- DATA STRUCTURES ----
+
+>> struct list sleeping;
+list contains threads during sleep time.
+
+---- ALGORITHMS ----
+
+>> timer_sleep()
+The function enters critical section by disabling interrupts then
+stores the time at which the current thread should wake up by computing it
+using the start timer and number of ticks needed to sleep then insert the thread
+with order to the sleeping list then block the thread from being running then sets the
+interupts back on.
+
+
+timer_interrupt()
+Increments the number of ticks then checks if advanced schedular is used in order to
+increment the cpu time for current thread and if ticks is a number of full seconds then
+it calculates the load average and recent cpu time for every thread also after each time slice
+it recalculates the priorities.
+
+After that it checks every sleeping thread that has wake up time larger than the current ticks
+in order to remove it from the sleeping list and unblock the thread and if any change happened to
+at least 1 thread then it yields the thread on return.
+
+
+>> It calculates load avergae and recent cpu time only if ticks is a full second and calculates
+priority only after each time slice (4 ticks), also it stops checking the sleeping threads once it finds
+a thread with wake up time more than current ticks and performs yield on return only if any thread got unblocked.
+
+---- SYNCHRONIZATION ----
+
+>> Start variable that contains the current timer ticks is a local variable so other
+threads can't change it, also wake up value is stored inside the struct of the specific
+thread while done in critical section.
+
+>> In timer_sleep changes made to the common variables ticks, wake up and the sleeping list 
+are done in critical section so timer_interrupt can't change them until timer_sleep finish.
+
+---- RATIONALE ----
+
+>> In timer_sleep I prefered disabling interrupts and blocking thread instead of using semaphore because we
+will eventually need to store each sleeping thread in a list even we used semaphores in order to use in timer_interrupt 
+
+			 PRIORITY SCHEDULING
+			 ===================
+
+---- DATA STRUCTURES ----
+
+>> B1:
+struct thread
+{
+  // The initial/base priority of this thread. Current thread priority could be higher because of priority donation.
+  int initial priority;
+
+  // List of all locks acquired by this thread. Used in deciding current thread priority.
+  struct list locks_acquired;
+
+  // Pointer to the lock this thread is blocking on. Used in nested priority donation.
+  struct lock *lock_waiting;
+}
+
+struct lock
+{
+  // Current lock priority, which equals the priority of the current thread 
+  // acquiring this lock. Used in deciding current thread priorities.
+  int priority;
+}
+
+
+>> B2: To track priority donation, each lock is assigned to a priority. If a thread
+blocks on a lock with lower priority, lock priority is increased to thread priority. 
+Thus, increasing the priority of the thread acquiring this lock.
+Diagram of nested donation:
+T1(p = H) ---> T2(p = M) ---> T3(p = L)
+After donation:
+T1(p = H) ---> T2(p = H) ---> T3(p = H)
+
+
+---- ALGORITHMS ----
+
+>> B3: When a thread waits for a lock, semaphore or condition variable, it is inserted
+into a sorted list of blocked threads (sorted according to threads priorities). When the
+synchronization primitive is available, the thread with the highest priority wakes up by
+removing the thread at the end of this sorted list.
+
+>> B4: When a thread calls lock_acquire():
+- It checks lock->priority (priority of lock holder)
+- If thread->priority > lock->priority, 
+    lock priority is increased to thread priority and thread priority is refreshed
+where thread priority = Max (initial_priority , Max(lock->priority acquired by this thread))
+After a thread releases a lock, it's priority is refreshed again.
+To handle a nested donation, each thread has a pointer to the lock it's waiting for. 
+While a thread is waiting for a lock with lower priority, the thread donates its priority to the lock,
+and lock holder priority is refreshed. 
+
+>> B5: When a thread calls lock_release():
+- this lock is removed from the thread's list of locks acquired
+- the thread priority is refreshed
+- if thread priority decreases, it yields the CPU
+
+
+---- SYNCHRONIZATION ----
+
+>> B6: This sequence of events is an example of a potential race condition in thread_set_priority():
+- thread T1 has priority H
+- thread T1 acquires lock A
+- thread T1 wants to lower its priority from H to L
+- thread T2 with priority M interrupts T1
+- thread T2 blocks on acquiring lock A held by T1
+- thread T1 lowers its priority from H to L
+Because of this sequence of events, no priority donation is done although current holder of lock A
+T1 should have priority L, while thread T2 with priority M blocks on lock A.
+That is why the priority donation result is inconsistent and depends on the order of instructions'
+execution.
+To handle this race condition, thread_set_priority() function is accomplished attomically by disabling
+interrupts. Locks cannot be used to avoid this race because it can lead to a potential deadlock. 
+
+
+---- RATIONALE ----
+
+>> B7: This design for handling priority scheduler is simple, yet it is efficient and robust
+because it handles every possible condition for single/multiple/nested donations.
+At any point in the program, any thread priority can be calculated to ensure that the highest 
+priority thread is always running. When the lifespan of a priority donation ends 
+(after releasing a lock), this design captures the change in priority to let the highest
+priority thread acquire the CPU.
+Also, this design handles nested donation well because each thread keeps track of the lock
+it is waiting for to acquire.  
+
+
+
+			  ADVANCED SCHEDULER
+			  ==================
+
+---- DATA STRUCTURES ----
+
+- struct thread -> int niceness : Integer value that keeps track of the threads niceness.
+- struct thread -> struct real recent_cpu_time : Structure of type real (implemented with fixed-point), which keeps track of the recent
+  cpu time of the current thread.
+- extern struct list ready_list : an ordered list which contains allthreads that are in the ready state, also used to determine how many
+  threads are ready.
+- static struct real Load_average : A real number representing the load average of the system.
+				  
+---- ALGORITHMS ----
+
+>> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
+>> has a recent_cpu value of 0.  Fill in the table below showing the
+>> scheduling decision and the priority and recent_cpu values for each
+>> thread after each given number of timer ticks:
+
+Load average at t(0) = 0.
+recent_cpu = (2*load_avg )/(2*load_avg + 1) * recent_cpu + nice.  
+priority = PRI_MAX - (recent_cpu / 4) - (nice * 2).
+Since recent_cpu & load average are recalculated with each seconf considered as a multiple of a second (in our implementatino, each 100 
+ticks), hence recent cpu will remain the same for none running threads.
+Recent cpu of running threads however will be incremented by 1 with each tick.
+
+timer  recent_cpu    priority   thread
+ticks   A   B   C   A   B   C   to run
+-----  --  --  --  --  --  --   ------
+ 0	0   0   0  63  61  58	   A
+ 4      4   0   0  62  61  58      A
+ 8      8   0   0  61  61  58      B
+12      8   4   0  61  60  58      A
+16     12   4   0  60  60  58      B
+20     12   8   0  60  59  58      A
+24     16   8   0  59  59  58      B
+28     16  12   0  59  58  58      A
+32     20  12   0  58  58  58      C
+36     20  12   4  58  58  57      B
+ 
+ 
+>> C3: Did any ambiguities in the scheduler specification make values
+>> in the table uncertain?  If so, what rule did you use to resolve
+>> them?  Does this match the behavior of your scheduler?
+
+>>>It would have been an ambiguity in the scheduler to deal with threads that has equal priorities, but our implementation of the ready 
+list as an ordered list avoide this uncertainity. When threads are put on the list only a thread with higher priority could take the 
+place of a thread with lower priority, hence if a threads priority is less than or equal a thread on the list it is considered lesser 
+than it.This implementation guarantees that a thread that has been on the list longer will always be considered first in case of equal
+priorities. 
+
+>> C4: How is the way you divided the cost of scheduling between code
+>> inside and outside interrupt context likely to affect performance?
+
+>>>It affects performance greatly, because codes in the interrupt context get repeated with each interrupt, which is with each tick.This 
+is why it had to be written wisely, in our implementation for advanced schedular we only put the timer dependant codes such as 
+calculation of load average, recent cpu, with each 100 tick, priorities with each 4, and only incrementing recent cpu of running threads 
+gets repeated witch each tick.
+
+---- RATIONALE ----
+
+>> C5: Briefly critique your design, pointing out advantages and
+>> disadvantages in your design choices.  If you were to have extra
+>> time to work on this part of the project, how might you choose to
+>> refine or improve your design?
+
+>>>The main disadvantage of our implmentation is the use of an ordered list which force us to sort the list each time priorities are
+recalculated, wich puts an extra overhead of O(n log n ) in our interrupt context.
+This does work with small numbers of threads but for a real-time operating system this would affect performance greatly.
+Instead, using a hashmap, with a hash dependent on the priority would have decreased the time complexity greatly, but extra space would 
+be needed.
+Another idea would be to create a new thread in the interrupt context with priority MAX, and to assign to this thread the responsability 
+to sort the ready threads according to their priorities, with interrupt disabled while this thread is working. Hence imediatly after 
+returning from interrupt this thread will sort threads, decreasing overhead in interrupt context.   
+
+>> C6: The assignment explains arithmetic for fixed-point math in
+>> detail, but it leaves it open to you to implement it.  Why did you
+>> decide to implement it the way you did?  If you created an
+>> abstraction layer for fixed-point math, that is, an abstract data
+>> type and/or a set of functions or macros to manipulate fixed-point
+>> numbers, why did you do so?  If not, why not?
+
+>>> The arithmetic of real number is done using 2 methods, fixed and floating points. While floating points do calculate real number with 
+much more precision, their calculation is much slower than that of fixed-point. Usually their is a specific unit in the hardware that do 
+the floating pints calculations, but with pintos not supporting these units, we are left with using fixed point which are less precise,
+but faster and much more efficient for our system.
+For the implementation of fixed point, we sticked with simple code. The 17.14 fixed-point representation of real numbers is based on 
+shifting the binary point of the number to the right by 14 bits, which is similar to representing 1.2 as 12 by multiplying the digit 2 by 
+10 we shift the decimal point to the right.This is achieved in computers for binary numbers by applying left shift by multiplying each 
+real number by 2^14 we give room for representing 14 more digits of the fraction, with limitations on the precision and the maximum size 
+of integer that can be represented.
+We keep a struct with an int atribute, where the integer represents the real number afer 14 bit shift, all operations are then done to 
+this shifted integer. And to get back the 32 bit integer we divide the real value by 14 which acts as truncating the number.  
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>>> It took a lot of time, but it was worth it.
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>>>Yes, it helped us in using the raw material and apply it and this is fascinating.
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>>>The installatin process was a little bit abstract, we didn't hacve a clue to weither we did the process right or wrong. 
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?
+
