@@ -119,6 +119,8 @@ thread_init (void)
   initial_thread->niceness = 0;
   initial_thread->recent_cpu_time = get_real(0);
   Load_average = get_real(0);
+  
+  initial_thread->parent = NULL;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -215,6 +217,11 @@ thread_create (const char *name, int priority,
     /* Default Priority Scheduler initialization*/
     init_thread (t, name, priority);
   }
+  
+  /* Adding communication link between parent and child thread. */
+  struct thread *parent_thread = thread_current();
+  parent_thread->child = t;
+  t->parent = parent_thread;
 
   tid = t->tid = allocate_tid ();
   /* Stack frame for kernel_thread(). */
@@ -670,6 +677,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->initial_priority = priority;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->child = NULL;
 
   t->lock_waiting = NULL;
   list_init (&t->locks_acquired);

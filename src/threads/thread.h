@@ -98,6 +98,9 @@ struct thread
     int64_t wakeup;                     //for storing the time for each thread to wake up
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    
+    struct thread* parent;              /* Pointer to parent thread. */
+    struct thread* child;               /* Pointer to child thread (if any). */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
