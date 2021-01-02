@@ -5,6 +5,11 @@
 #include "threads/thread.h"
 
 static void syscall_handler (struct intr_frame *);
+static struct lock files_sync_lock;
+int get_int (int** esp);
+char* get_char_ptr (char*** esp);
+void* get_void_char (void*** esp);
+void validate_void_ptr (const void* pt);
 
 void
 syscall_init (void) 
@@ -17,4 +22,20 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
   printf ("system call!\n");
   thread_exit ();
+}
+
+int get_int (int** esp){
+
+}
+
+char* get_char_ptr (char*** esp){
+
+}
+
+void* get_void_char (void*** esp){
+
+}
+
+void validate_void_ptr (const void* pt){
+
 }
