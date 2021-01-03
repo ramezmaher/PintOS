@@ -3,7 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "sys/types.h"
+#include <user/syscall.h>
 
 
 static void syscall_handler (struct intr_frame *);
@@ -56,7 +56,8 @@ syscall_handler (struct intr_frame *f UNUSED)
     //tell_wrapper();
     case 12:
     //close_wrapper();
-    default:
+    default :
+      exit(1);
   }
   thread_exit ();
 }
