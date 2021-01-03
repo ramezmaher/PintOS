@@ -3,7 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "sys/types.h"
+#include <user/syscall.h>
 
 
 static void syscall_handler (struct intr_frame *);
@@ -33,11 +33,11 @@ syscall_handler (struct intr_frame *f UNUSED)
     case 0:
     //halt_wrapper();
     case 1:
-    //exit_wrapper();
+      exit_wrapper(f->esp);
     case 2:
     //exec_wrapper();
     case 3:
-    //wait_wrapper();
+      f->eax = wait_wrapper(f->esp);
     case 4:
     //create_wrapper();
     case 5:
@@ -49,20 +49,21 @@ syscall_handler (struct intr_frame *f UNUSED)
     case 8:
     //read_wrapper();
     case 9:
-    //write_wrapper();
+      f->eax = write_wrapper(f->esp);
     case 10:
     //seek_wrapper();
     case 11:
     //tell_wrapper();
     case 12:
     //close_wrapper();
-    default:
+    default :
+      exit(1);
   }
   thread_exit ();
 }
 
 int get_int (int** esp){
-  return pagedir_get_page(thread_current()->pagedir, esp);
+  return esp;
 }
 
 char* get_char_ptr (char*** esp){
@@ -87,14 +88,15 @@ void halt_wrapper (void){
 
 }
 
-void exit_wrapper (int status){
-
+void exit_wrapper (int* esp){
+  exit(*(esp + 1));
 }
 pid_t exec_wrapper (const char *cmd_line){
 
 }
-int wait_wrapper (pid_t pid){
-
+int wait_wrapper (pid_t* esp){
+  pid_t pid = *(esp + 1) ;
+  return wait(pid);
 }
 bool create_wrapper (const char *file, unsigned initial_size){
 
@@ -111,8 +113,11 @@ int filesize_wrapper (int fd){
 int read_wrapper (int fd, void *buffer, unsigned size){
 
 }
-int write_wrapper(int fd, const void *buffer, unsigned size){
-
+int write_wrapper(int* esp){
+  int fd = *(esp + 1 );
+  void* buffer = (void*)(*(esp+2));
+  unsigned size = * ((unsigned*)esp + 3);
+  return write(fd, buffer, size);
 }
 void seek_wrapper (int fd, unsigned position){
 
@@ -130,13 +135,13 @@ void halt (void){
 }
 
 void exit (int status){
-
+  process_exit();
 }
 pid_t exec (const char *cmd_line){
 
 }
 int wait (pid_t pid){
-
+  process_wait(pid);
 }
 bool create (const char *file, unsigned initial_size){
 
@@ -154,7 +159,11 @@ int read (int fd, void *buffer, unsigned size){
 
 }
 int write (int fd, const void *buffer, unsigned size){
-
+  if (fd == 1)
+  {
+    putbuf(buffer, size);
+    return size;
+  }
 }
 void seek (int fd, unsigned position){
 
