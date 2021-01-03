@@ -11,7 +11,7 @@ void process_activate (void);
 struct open_file
 {
    int fd;
-   FILE* ptr;
+   struct file* ptr;
 };
 
 struct child_process
