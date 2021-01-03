@@ -99,8 +99,6 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     
-    struct thread* parent;              /* Pointer to parent thread. */
-    struct thread* child;               /* Pointer to child thread (if any). */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -108,15 +106,16 @@ struct thread
 #endif
 
    //userprog
-   struct list open_files;
-   struct list child_processes;
-   bool child_creation_success;
-   int child_status;
-   tid_t waiting_on;
-   FILE* executable_file;
-   struct semaphore parent_child_synch;
-   int fd_last;
-
+   struct list open_files;              /* List of open files by this thread. */
+   struct list child_processes;         /* List of this thread's children. */
+   struct thread* parent;               /* Pointer to parent process. */
+   bool child_creation_success;         /* Indicates whether child creation succeeded. */
+   int child_status;                    /* */
+   tid_t waiting_on;                    /* */
+   FILE* executable_file;         /* */
+   struct semaphore parent_child_synch;  /* Used for parent-child synchronization. */
+   int fd_last;                         /* Last file descriptor created. */
+  
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -179,5 +178,6 @@ void calculate_load_avg(void);
 void calculate_recent_cpu_for_all(void);
 void calculate_priority_for_all(void);
 void incremet_recent_cpu(struct thread *cur);
+
 
 #endif /* threads/thread.h */

@@ -23,6 +23,12 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
   printf ("system call!\n");
+  
+  /* READ INTEGER FROM STACK. */
+  
+  /* SWITCH STATEMENT ACCORDING TO INTEGER READ
+     AND CALLS PROPER SYSTEM CALL WRAPPER.      */ 
+
   switch (get_int(f->esp)){
     case 0:
     //halt_wrapper();

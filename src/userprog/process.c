@@ -18,6 +18,9 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#define MAX_ARGS 10      /* Maximum number of arguments passed to command line. */
+#define MAX_CMD_LINE 128 /* Maximum number of charachters in a single command line. */
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -37,9 +40,18 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  
+  /* The executable name is extracted from the raw filename. */
+  char file_name_arr[MAX_CMD_LINE];
+  strlcpy (file_name_arr, file_name, PGSIZE);
+  char *save_ptr;
+  file_name = strtok_r (file_name_arr, " ", &save_ptr); 
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  
+  /* PARENT MUST WAIT HERE FOR SUCCESSFULL CHILD CREATION. */
+  
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -195,7 +207,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, int argc, char *argv[]);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -220,9 +232,21 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
+  
+  /* Parsing raw filename (command line). */
+  char *argv[MAX_ARGS];
+  char file_name_arr[MAX_CMD_LINE];
+  strlcpy (file_name_arr, file_name, PGSIZE);
+  int argc = 0;
+  char *save_ptr;
+  
+  argv[argc] = strtok_r (file_name_arr, " ", &save_ptr);
+  while (argv[argc] != NULL)
+    argv[++argc] = strtok_r (NULL, " ", &save_ptr);
+  
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (argv[0]);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -302,7 +326,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, argc, argv))
     goto done;
 
   /* Start address. */
@@ -427,7 +451,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, int argc, char *argv[]) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -441,6 +465,53 @@ setup_stack (void **esp)
       else
         palloc_free_page (kpage);
     }
+    
+  /* Arguments passing. */
+  if (success)
+  {
+    int i;
+    char *addresses[argc];
+    
+    // 1. Writing each argument
+    for (i = argc-1; i >= 0; i--)
+    {
+      addresses[i] = (char *)*esp;
+      *esp -= strlen ("\0");
+      memcpy (*esp, "\0", strlen("\0"));
+      *esp -= strlen (argv[i]);
+      memcpy (*esp, argv[i], strlen (argv[i]));
+    }
+    
+    // 2. Word Align
+    int word_align = (int)esp % 4; // ERROR MOST PROBABLY
+    *esp -= word_align;
+    memset (*esp, 0, word_align);
+    
+    // 3. argv[argc] --> 4 bytes of 0's
+    *esp -= 4;
+    memset (*esp, 0, 4);
+    
+    // 4. Addresses pointing to each of the argument
+    for (i = argc-1; i >= 0; i--)
+    {
+      *esp -= sizeof (char*);
+      memcpy (*esp, addresses[i], sizeof(char*));
+    }
+    
+    // 5. Address of argv
+    char **argv_addr = (char**)esp;
+    *esp -= sizeof (char**);
+    memcpy (*esp, argv_addr, sizeof (char**));
+    
+    // 6. Number of arguments (argc) spanning over 4 bytes
+    *esp -= sizeof (int);
+    memcpy (*esp, argc, sizeof (int));
+    
+    // 7. Fake Return address
+    *esp -= 4;
+    memset (*esp, 0, 4);
+    
+  }
   return success;
 }
 
