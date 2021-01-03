@@ -98,11 +98,24 @@ struct thread
     int64_t wakeup;                     //for storing the time for each thread to wake up
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    
+    struct thread* parent;              /* Pointer to parent thread. */
+    struct thread* child;               /* Pointer to child thread (if any). */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+
+   //userprog
+   struct list open_files;
+   struct list child_processes;
+   bool child_creation_success;
+   int child_status;
+   tid_t waiting_on;
+   FILE* executable_file;
+   struct semaphore parent_child;
+   int fd_last;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -166,5 +179,18 @@ void calculate_load_avg(void);
 void calculate_recent_cpu_for_all(void);
 void calculate_priority_for_all(void);
 void incremet_recent_cpu(struct thread *cur);
+
+//userprog
+struct open_file
+{
+   int fd;
+   FILE* ptr;
+};
+
+struct child_process
+{
+   tid_t pid;
+   struct thread* t;
+};
 
 #endif /* threads/thread.h */
