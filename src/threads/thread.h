@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "real_num.h"
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -24,6 +25,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define USERPROG
 
 /* A kernel thread or user process.
 
@@ -112,7 +114,7 @@ struct thread
    bool child_creation_success;         /* Indicates whether child creation succeeded. */
    int child_status;                    /* */
    tid_t waiting_on;                    /* */
-   FILE* executable_file;         /* */
+   struct file* executable_file;         /* */
    struct semaphore parent_child_synch;  /* Used for parent-child synchronization. */
    int fd_last;                         /* Last file descriptor created. */
   
