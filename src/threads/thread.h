@@ -114,7 +114,7 @@ struct thread
    int child_status;
    tid_t waiting_on;
    FILE* executable_file;
-   struct semaphore parent_child;
+   struct semaphore parent_child_synch;
    int fd_last;
 
     /* Owned by thread.c. */
@@ -179,18 +179,5 @@ void calculate_load_avg(void);
 void calculate_recent_cpu_for_all(void);
 void calculate_priority_for_all(void);
 void incremet_recent_cpu(struct thread *cur);
-
-//userprog
-struct open_file
-{
-   int fd;
-   FILE* ptr;
-};
-
-struct child_process
-{
-   tid_t pid;
-   struct thread* t;
-};
 
 #endif /* threads/thread.h */
