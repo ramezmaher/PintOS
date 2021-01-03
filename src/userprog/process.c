@@ -50,7 +50,7 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   
-  /* PARENT MUST WAIT HERE FOR SUCCESSFULL CHILD CREATION. */
+  int status = process_wait (tid);
   
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
@@ -73,6 +73,13 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+  /* Wakes up waiting parent (if there is). */
+  if (thread_current ()->parent != NULL)
+  {
+    thread_current ()->parent->child_creation_success = success;
+    sema_up (&thread_current ()->parent->parent_child_sync);
+  }
+  
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
@@ -98,12 +105,11 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  while(true)
-  {
-    thread_yield();
-  }
+  thread_current ()->waiting_on = child_tid;
+  sema_down (&thread_current ()->parent_child_sync);
+  return -1;
 }
 
 /* Free the current process's resources. */
@@ -479,8 +485,8 @@ setup_stack (void **esp, int argc, char *argv[])
     for (i = argc-1; i >= 0; i--)
     {
       addresses[i] = (char *)*esp;
-      *esp -= strlen ("\0");
-      memcpy (*esp, "\0", strlen("\0"));
+      *esp -= sizeof(char);
+      memcpy (*esp, '\0', sizeof(char));
       *esp -= strlen (argv[i]);
       memcpy (*esp, argv[i], strlen (argv[i]));
     }

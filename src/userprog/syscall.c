@@ -75,7 +75,13 @@ void* get_void_char (void*** esp){
 }
 
 void validate_void_ptr (const void* pt){
-
+  if(pt != NULL && is_user_vaddr(pt) && lookup_page(thread_current()->pagedir,pt,false) != NULL){
+    return;
+  }
+  else
+  {
+    exit(-1);
+  }  
 }
 
 void halt_wrapper (void){
