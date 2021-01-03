@@ -220,7 +220,6 @@ thread_create (const char *name, int priority,
   
   /* Adding communication link between parent and child thread. */
   struct thread *parent_thread = thread_current();
-  parent_thread->child = t;
   t->parent = parent_thread;
 
   tid = t->tid = allocate_tid ();
@@ -677,10 +676,14 @@ init_thread (struct thread *t, const char *name, int priority)
   t->initial_priority = priority;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  t->child = NULL;
 
   t->lock_waiting = NULL;
   list_init (&t->locks_acquired);
+  
+  /* USER PROG */
+  list_init (&t->open_files);
+  list_init (&t->child_processes);
+  //sema_init (&t->parent_child_sync, 0);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
