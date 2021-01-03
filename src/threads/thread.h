@@ -112,10 +112,10 @@ struct thread
    bool child_creation_success;         /* Indicates whether child creation succeeded. */
    int child_status;                    /* */
    tid_t waiting_on;                    /* */
-   //struct file executable_file;         /* */
-   //struct semaphore parent_child_sync;  /* Used for parent-child synchronization. */
+   FILE* executable_file;         /* */
+   struct semaphore parent_child_synch;  /* Used for parent-child synchronization. */
    int fd_last;                         /* Last file descriptor created. */
-
+  
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -179,17 +179,5 @@ void calculate_recent_cpu_for_all(void);
 void calculate_priority_for_all(void);
 void incremet_recent_cpu(struct thread *cur);
 
-//userprog
-struct open_file
-{
-   int fd;
-   //struct file ptr;
-};
-
-struct child_process
-{
-   tid_t pid;
-   struct thread* t;
-};
 
 #endif /* threads/thread.h */
