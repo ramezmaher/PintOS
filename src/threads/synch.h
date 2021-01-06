@@ -4,17 +4,11 @@
 #include <list.h>
 #include <stdbool.h>
 
-/* Thread priorities. */
-#define PRI_MIN 0                       /* Lowest priority. */
-#define PRI_DEFAULT 31                  /* Default priority. */
-#define PRI_MAX 63                      /* Highest priority. */
-
 /* A counting semaphore. */
 struct semaphore 
   {
-    unsigned value;                        /* Current value. */
+    unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
-    int num_waiters;                       /* Number of waiting threads. */
   };
 
 void sema_init (struct semaphore *, unsigned value);
@@ -28,8 +22,6 @@ struct lock
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
-    int priority;               /* Maximum waiting thread priority. */
-    struct list_elem elem;      /* Element for locks acquired list. */
   };
 
 void lock_init (struct lock *);
@@ -41,8 +33,7 @@ bool lock_held_by_current_thread (const struct lock *);
 /* Condition variable. */
 struct condition 
   {
-    struct list waiters[PRI_MAX+1];        /* List of waiting threads. */
-    int num_waiters;                       /* Number of waiting threads.*/
+    struct list waiters;        /* List of waiting threads. */
   };
 
 void cond_init (struct condition *);
