@@ -1,87 +1,121 @@
+#include "devices/shutdown.h"
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include <user/syscall.h>
+#include "threads/vaddr.h"
+#include "threads/synch.h"
+#include "threads/malloc.h"
+#include "userprog/process.h"
+#include "userprog/pagedir.h"
+
+typedef int pid_t;
+
+struct lock files_sync_lock;
+int fd_num;
+
+static void syscall_handler(struct intr_frame *);
 
 
-static void syscall_handler (struct intr_frame *);
-static struct lock files_sync_lock;
-int get_int (int** esp);
-char* get_char_ptr (char*** esp);
-void* get_void_char (void*** esp);
-void validate_void_ptr (const void* pt);
-
-void
-syscall_init (void) 
+void 
+syscall_init(void)
 {
-  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&files_sync_lock);
+  fd_num = 2;
 }
+
+
+static int
+get_data (const uint8_t *uaddr)
+{
+  int result;
+  asm ("movl $1f, %0; movzbl %1, %0; 1:"
+  : "=&a" (result) : "m" (*uaddr));
+  return result;
+}
+
+
+static bool
+put_data (uint8_t *udst, uint8_t byte)
+{
+  int error_code;
+  asm ("movl $1f, %0; movb %b2, %1; 1:"
+  : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+  return error_code != -1;
+}
+
+static bool 
+validate(void *ptr) {
+  return ptr != NULL && is_user_vaddr(ptr) && get_data(ptr) != -1;
+}
+
+
+static void 
+validate_multiple(void *ptr, int size) {
+  char *temp = ptr;
+  if (!validate(temp + size - 1)) {
+    exit(-1);
+  }
+}
+
+static int 
+GET_ARG(void *ptr, int offset)
+{
+  int *temp = (int*) ptr + offset;
+  validate_multiple(temp, 4);
+  return *temp;
+}
+
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler(struct intr_frame *f)
 {
-  printf ("system call!\n");
-  
-  /* READ INTEGER FROM STACK. */
-  
-  /* SWITCH STATEMENT ACCORDING TO INTEGER READ
-     AND CALLS PROPER SYSTEM CALL WRAPPER.      */ 
-
-  switch (get_int(f->esp)){
-    case 0:
-    //halt_wrapper();
-    case 1:
-      exit_wrapper(f->esp);
-    case 2:
-    //exec_wrapper();
-    case 3:
-      f->eax = wait_wrapper(f->esp);
-    case 4:
-    //create_wrapper();
-    case 5:
-    //remove_wrapper();
-    case 6:
-    //open_wrapper();
-    case 7:
-    //filesize_wrapper();
-    case 8:
-    //read_wrapper();
-    case 9:
-      f->eax = write_wrapper(f->esp);
-    case 10:
-    //seek_wrapper();
-    case 11:
-    //tell_wrapper();
-    case 12:
-    //close_wrapper();
-    default :
-      exit(1);
-  }
-  thread_exit ();
-}
-
-int get_int (int** esp){
-  return esp;
-}
-
-char* get_char_ptr (char*** esp){
-
-}
-
-void* get_void_char (void*** esp){
-
-}
-
-void validate_void_ptr (const void* pt){
-  if(pt != NULL && is_user_vaddr(pt) && lookup_page(thread_current()->pagedir,pt,false) != NULL){
-    return;
-  }
-  else
+  switch ((int)GET_ARG(f->esp, 0))
   {
-    exit(-1);
-  }  
+  case SYS_HALT:
+    //halt_wrapper();
+    break;
+  case SYS_EXIT:
+    exit_wrapper(f->esp);
+    break;
+  case SYS_EXEC:
+    f -> eax = exec_wrapper(f->esp);
+    break;
+  case SYS_WAIT:
+    f -> eax = wait_wrapper(f->esp);
+    break;
+  case SYS_CREATE:
+    //f->eax = create_wrapper();
+    break;
+  case SYS_REMOVE:
+    //f->eax = remove_wrapper();
+    break;
+  case SYS_OPEN:
+    //f->eax = open_wrapper();
+    break;
+  case SYS_FILESIZE:
+    //f->eax = filesize_wrapper();
+    break;
+  case SYS_READ:
+    //f->eax = read_wrapper();
+    break;
+  case SYS_WRITE:
+    f -> eax = write_wrapper(f->esp);
+    break;
+  case SYS_SEEK:
+    //f->eax = seek_wrapper();
+    break;
+  case SYS_TELL:
+    //f->eax = tell_wrapper();
+    break;
+  case SYS_CLOSE:
+    //f->eax = close_wrapper();
+    break;
+  default:
+    break;
+  }
 }
 
 void halt_wrapper (void){
@@ -89,14 +123,15 @@ void halt_wrapper (void){
 }
 
 void exit_wrapper (int* esp){
-  exit(*(esp + 1));
+  exit(GET_ARG(esp, 1));
 }
-pid_t exec_wrapper (const char *cmd_line){
-
+pid_t exec_wrapper (const char *esp){
+  int arg = GET_ARG(esp, 1);
+  validate_multiple(arg, 4);
+  return exec (arg);
 }
 int wait_wrapper (pid_t* esp){
-  pid_t pid = *(esp + 1) ;
-  return wait(pid);
+  return wait(GET_ARG(esp, 1));
 }
 bool create_wrapper (const char *file, unsigned initial_size){
 
@@ -114,9 +149,10 @@ int read_wrapper (int fd, void *buffer, unsigned size){
 
 }
 int write_wrapper(int* esp){
-  int fd = *(esp + 1 );
-  void* buffer = (void*)(*(esp+2));
-  unsigned size = * ((unsigned*)esp + 3);
+  int fd = GET_ARG(esp, 1);
+  void* buffer = GET_ARG(esp, 2);
+  unsigned size = GET_ARG(esp, 3);
+  validate_multiple(buffer, size);
   return write(fd, buffer, size);
 }
 void seek_wrapper (int fd, unsigned position){
@@ -135,10 +171,18 @@ void halt (void){
 }
 
 void exit (int status){
-  process_exit();
+  printf("%s: exit(%d)\n", thread_current()->name, status);
+  if(thread_current()->self != NULL)
+  {
+    thread_current()->self->exit_status = status;
+    thread_current()->self->t =NULL;
+  }
+  thread_exit();
+  NOT_REACHED();
 }
-pid_t exec (const char *cmd_line){
 
+pid_t exec (const char *cmd_line){
+  return process_execute(cmd_line);
 }
 int wait (pid_t pid){
   process_wait(pid);
